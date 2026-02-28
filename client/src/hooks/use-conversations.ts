@@ -8,11 +8,12 @@ export function useConversations() {
     queryKey: [api.conversations.list.path],
     queryFn: async () => {
       const res = await fetch(api.conversations.list.path, { credentials: "include" });
+      if (res.status === 401) return [];
       if (!res.ok) throw new Error("Failed to fetch conversations");
       return api.conversations.list.responses[200].parse(await res.json());
     },
-    // Polling for real-time updates as requested in implementation notes
-    refetchInterval: 5000, 
+    refetchInterval: 5000,
+    retry: false,
   });
 }
 
