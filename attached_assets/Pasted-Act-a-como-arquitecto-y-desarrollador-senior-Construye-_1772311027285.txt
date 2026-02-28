@@ -1,0 +1,104 @@
+Actúa como arquitecto y desarrollador senior. Construye una aplicación web tipo “Inbox compartido de WhatsApp” usando la API oficial de Meta (WhatsApp Cloud API).
+
+Nombre del proyecto: “Inbox WhatsApp Multiagente”.
+
+OBJETIVO
+Empresas que hoy usan WhatsApp Web tienen límite de sesiones y no hay trazabilidad. Esta app permitirá que múltiples agentes contesten desde un solo número vía WhatsApp Cloud API, con roles/permisos, asignación de chats, notas internas por contacto y métricas por agente.
+
+STACK (usar exactamente este stack)
+- Next.js (App Router) + TypeScript + Tailwind
+- Backend: API routes dentro de Next.js
+- DB: PostgreSQL + Prisma
+- Auth: NextAuth con credenciales (email/password) y roles
+- Realtime: Socket.io (o Pusher si es más simple) para actualizar inbox en tiempo real
+- Charts: Recharts
+- Deploy listo para Replit
+
+ENTIDADES (Prisma)
+1) Organization (multi-tenant)
+- id, name, createdAt
+2) User
+- id, organizationId, name, email, passwordHash, role (ADMIN, SUPERVISOR, AGENT, READONLY), status (ACTIVE, DISABLED), createdAt
+3) WhatsAppAccount / PhoneNumber
+- id, organizationId, phoneNumberId (Meta), displayNumber, tokenEncryptedOrEnvRef
+4) Contact
+- id, organizationId, waId (telefono), name, email(optional), tags(string[]), createdAt
+5) Conversation
+- id, organizationId, contactId, status (OPEN, PENDING, CLOSED), assignedToUserId(optional), lastMessageAt, createdAt
+6) Message
+- id, organizationId, conversationId, direction (INBOUND/OUTBOUND), body, type (TEXT), waMessageId, status (SENT/DELIVERED/READ/FAILED), sentByUserId(optional), createdAt
+7) Note (interna)
+- id, organizationId, contactId, createdByUserId, body, createdAt
+8) AuditLog
+- id, organizationId, userId, action, metadataJson, createdAt
+
+FUNCIONALIDADES MVP (obligatorias)
+A) Autenticación + RBAC
+- Login
+- Middleware que limite por rol:
+  - ADMIN: todo
+  - SUPERVISOR: ver todo, reasignar conversaciones, ver métricas
+  - AGENT: ver conversaciones asignadas y sin asignar, tomar/asignar a sí mismo, enviar mensajes, crear notas
+  - READONLY: solo ver, no enviar, no editar
+- ADMIN puede crear usuarios, desactivar usuarios, cambiar roles.
+
+B) Inbox tipo WhatsApp
+- Layout 3 paneles:
+  1) Izquierda: lista de conversaciones (buscador por nombre/teléfono, filtros: status OPEN/PENDING/CLOSED, filtro por “asignadas a mí / sin asignar / todas” según rol)
+  2) Centro: chat (mensajes en orden, input para enviar, estados de envío)
+  3) Derecha: ficha del contacto + notas internas + tags editables (según permisos)
+- Acciones de conversación:
+  - “Tomar conversación” (asignarme)
+  - “Asignar a usuario” (solo SUPERVISOR/ADMIN)
+  - Cambiar estado (OPEN/PENDING/CLOSED)
+- Evitar choques: mostrar indicador “X está respondiendo” o bloquear envío si otro usuario tiene la conversación “en foco” (implementación simple con presence via realtime).
+
+C) Integración con WhatsApp Cloud API (Meta)
+- Implementar webhook endpoint:
+  - POST /api/webhooks/whatsapp para recibir mensajes entrantes y statuses
+  - Verificación GET del webhook (hub.challenge)
+- Al recibir inbound:
+  - Upsert Contact por waId
+  - Crear o actualizar Conversation (status OPEN, lastMessageAt)
+  - Insertar Message direction=INBOUND
+  - Emitir evento realtime para actualizar la UI
+- Envío de mensajes:
+  - POST /api/whatsapp/send con conversationId y texto
+  - Llamar a WhatsApp Cloud API para enviar
+  - Guardar Message OUTBOUND con sentByUserId
+  - Actualizar estatus con callbacks de status webhook
+- Variables de entorno:
+  - WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, META_APP_SECRET (si aplica)
+- Incluir guía en README para configurar la app en Meta Developers y conectar el webhook.
+
+D) Métricas y Dashboard (ADMIN y SUPERVISOR)
+- Dashboard con:
+  - Mensajes enviados por usuario (rango de fechas)
+  - Tiempo de primera respuesta por conversación (si primer OUTBOUND después del primer INBOUND)
+  - Tiempo promedio de respuesta (inbound->siguiente outbound por agente)
+  - Conversaciones atendidas/cerradas por usuario
+- Gráficas con Recharts + tabla detallada.
+
+E) Seguridad y calidad
+- Hash de passwords (bcrypt)
+- Validación de inputs
+- Manejo de errores UI (toasts)
+- Auditoría: registrar en AuditLog (login, asignación, cambio de estado, creación de usuario, cambio de rol)
+- Seed de datos: 1 org, 1 admin, 1 supervisor, 2 agentes, 1 readonly y ejemplos de conversaciones.
+- Tests mínimos para: RBAC y cálculo de métricas.
+
+UX DETALLES
+- Diseño tipo dashboard limpio
+- Estados vacíos (“sin conversaciones”, “selecciona una conversación”)
+- Indicadores: conversación asignada a X, status, últimos mensajes
+- Quick replies (mínimo 5 plantillas internas) para agentes (no Meta templates, solo snippets).
+
+ENTREGABLES
+- Código funcionando
+- README completo con pasos de instalación y configuración de webhook
+- Prisma schema + migraciones
+- Seed
+- Instrucciones para correr local y en Replit
+
+PLAN
+Primero escribe checklist de implementación por etapas, luego construye paso a paso asegurando que compile y funcione.
